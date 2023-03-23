@@ -1,0 +1,37 @@
+import pandas as pd
+df = pd.read_csv('output.csv')
+from scipy import signal
+
+# Define the bandpass filter parameters
+lowcut = 20 # Hz
+highcut = 450 # Hz
+fs = 1000 # Hz
+order = 4
+
+# Create the bandpass filter
+b, a = signal.butter(order, [lowcut, highcut], btype='band', fs=fs)
+
+# Apply the filter to the EMG signals
+emg_filtered_1 = signal.filtfilt(b, a, df.iloc[:, 0])
+emg_filtered_2 = signal.filtfilt(b, a, df.iloc[:, 1])
+
+threshold = 40
+above_threshold_1 = emg_filtered_1 > threshold
+above_threshold_2 = emg_filtered_2 > threshold
+crossings_1 = (above_threshold_1[:-1] & ~above_threshold_1[1:]).nonzero()[0] + 1
+crossings_2 = (above_threshold_2[:-1] & ~above_threshold_2[1:]).nonzero()[0] + 1
+crossings = sorted(list(set(crossings_1) | set(crossings_2)))
+
+segment_size = 2000
+segments = []
+last_crossing = -segment_size # initialize last crossing to be outside the first segment
+for crossing in crossings:
+    if crossing - last_crossing > segment_size:
+        segment_start = max(0, crossing - segment_size // 2)
+        segment_end = min(len(df), crossing + segment_size // 2)
+        segment = df.iloc[segment_start:segment_end]
+        segments.append(segment)
+        last_crossing = crossing
+
+segments_df = pd.concat(segments, ignore_index=True)
+segments_df.to_csv('emg_segments.csv', index=False)
